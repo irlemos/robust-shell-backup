@@ -4,50 +4,50 @@
 
 A comprehensive and reliable backup system, written in Bash, designed to automate the backup of multiple websites (files and databases) to an AWS S3 bucket.
 
-<br>
+This project was created to solve the need for an automated, robust, and low-impact backup solution for web servers hosting multiple sites. Many existing solutions are complex, expensive, or consume valuable resources like disk space, which is a critical factor in shared hosting environments or smaller cloud servers.
 
 ## Table of Contents
 
 -   [The Project: Vision and Purpose](#the-project-vision-and-purpose)
--   [Key Features](#-key-features)
+-   [Key Features](#key-features)
 -   [Requirements](#requirements)
--   [Step-by-Step Installation and Configuration Guide](#-step-by-step-installation-and-configuration-guide)
+-   [Step-by-Step Installation and Configuration Guide](#step-by-step-installation-and-configuration-guide)
     -   [Step 0: Configure AWS Credentials](#step-0-configure-aws-credentials)
     -   [Step 1: Clone the Repository and Set Permissions](#step-1-clone-the-repository-and-set-permissions)
     -   [Step 2: Configure Email Sending (SSMTP)](#step-2-configure-email-sending-ssmtp)
     -   [Step 3: Customize the Configuration File](#step-3-customize-the-configuration-file)
     -   [Step 4: Schedule Automation with Cron](#step-4-schedule-automation-with-cron)
--   [File Breakdown](#-file-breakdown)
-    -   [The Configuration File: `backup_sites.conf`](#the-configuration-file-backup_sitesconf)
-    -   [The Main Script: `backup_sites.sh`](#the-main-script-backup_sitessh)
+-   [Restoration Assistant](#restoration-assistant)
+-   [File Breakdown](#file-breakdown)
 -   [Manual Usage and Testing](#manual-usage-and-testing)
 -   [How to Contribute](#how-to-contribute)
--   [About the Author](#-about-the-author)
--   [License](#-license)
+-   [About the Author](#about-the-author)
+-   [License](#license)
 
 ---
 
 ## The Project: Vision and Purpose
 
-This project was born out of the need for an automated, robust, and low-impact backup solution for web servers hosting multiple sites. Many existing solutions are complex, expensive, or consume valuable resources like disk space, which is a critical factor in shared hosting environments or smaller cloud servers.
+This project was born out of the need for an automated, robust, and low-impact backup solution for web servers hosting multiple sites.
 
 **Robust Shell Backup** is designed to be:
 
 -   **Reliable:** It uses techniques like a two-pass `rsync` to ensure files are copied consistently, even if they are being modified during the process.
 -   **Efficient:** It sends compressed backups directly to AWS S3 via *streaming*, eliminating the need to store bulky temporary files on the server's local disk.
 -   **Customizable:** Through a centralized and easy-to-understand configuration file, the system can be adapted to various hosting scenarios, managing multiple sites, databases, and specific exclusion rules.
--   **Extensible:** Although currently focused on MySQL databases, the script's architecture is designed to be modular, allowing the community to adapt and enhance it to support other database technologies (like PostgreSQL, MongoDB) or different storage systems.
+-   **Extensible:** Although currently focused on MySQL databases, the script's architecture is designed to be modular.
 
 Its purpose is to provide system administrators and developers with a "set it and forget it" tool that offers peace of mind, knowing their critical website data is secure, consistent, and stored off-site.
 
 ---
 
-## ✨ Key Features
+## Key Features
 
 -   **Consistent Snapshots**: Creates a local snapshot of files using a two-pass `rsync`, minimizing inconsistencies from files that change during the backup.
 -   **Direct Streaming to S3**: Compresses and sends backups via a stream (`|`) to AWS, saving disk space and speeding up the process.
 -   **Centralized Management**: Configure all sites, databases, and exclusions in a single `.conf` file.
 -   **MySQL Database Backup**: Performs dumps and compression of MySQL databases.
+-   **Restoration Assistant**: Includes an interactive script to restore files and databases from S3, with automatic `wp-config.php` updates for WordPress sites.
 -   **Automated Cleanup**: Removes old backups from S3 based on a configurable retention period.
 -   **Idempotent Execution**: Checks if the day's backup already exists and skips execution to avoid redundant work.
 -   **Atomic Operations per Site**: If a backup step fails, partial files for that day are removed from S3 to maintain integrity.
@@ -62,26 +62,18 @@ For the script to work correctly, your server must have the following tools inst
 
 -   `aws-cli`: The AWS Command Line Interface.
 -   `rsync`: A utility for file synchronization.
--   `mysqldump`: A tool for exporting MySQL databases.
+-   `mysqldump` & `mysql`: Tools for database operations.
 -   `ssmtp`: A simple mail client to relay emails via an external SMTP.
+-   `sed`: Used for updating configuration files during restoration.
 
 ---
 
-## 🚀 Step-by-Step Installation and Configuration Guide
+## Step-by-Step Installation and Configuration Guide
 
 ### Step 0: Configure AWS Credentials
 
 First and foremost, the script needs permission to access your S3 bucket. The most secure way to do this is to configure AWS credentials for the user that will run the script.
 
-Install the AWS CLI if you haven't already:
-```sh
-    # For Debian/Ubuntu-based systems
-    sudo apt-get install aws-cli
-    # For RHEL/CentOS-based systems
-    sudo yum install aws-cli
-```
-
-Run the initial configuration for S3 access credentials:
 ```sh
 aws configure
 ```
@@ -89,7 +81,7 @@ Follow the prompts to enter your `AWS Access Key ID`, `AWS Secret Access Key`, `
 
 ### Step 1: Clone the Repository and Set Permissions
 
-First, get the files and make the script executable.
+First, get the files and make the scripts executable.
 
 ```sh
 # Clone this repository to your server
@@ -98,38 +90,19 @@ git clone https://github.com/irlemos/robust-shell-backup.git
 # Navigate to the project directory
 cd robust-shell-backup
 
-# Grant execution permission to the main script
-chmod +x backup_sites.sh
+# Grant execution permission to the scripts
+chmod +x backup_sites.sh restore_site.sh
 ```
 
 ### Step 2: Configure Email Sending (SSMTP)
 
-For error alerts to work, you need to configure `ssmtp` to use an external mail server (like Gmail, SendGrid, etc.). This is necessary because most cloud providers (including AWS) block outgoing port 25 to prevent spam.
+For error alerts to work, you need to configure `ssmtp` to use an external mail server (like Gmail, SendGrid, etc.).
 
-1.  Install `ssmtp` (if you don't have it):
-    ```sh
-    # For Debian/Ubuntu-based systems
-    sudo apt-get install ssmtp
-    # For RHEL/CentOS-based systems
-    sudo yum install ssmtp
-    ```
-
-2.  Edit the `/etc/ssmtp/ssmtp.conf` configuration file with your email provider's information. Example for Gmail:
-    ```ini
-    # /etc/ssmtp/ssmtp.conf
-    root=your-sending-email@gmail.com
-    mailhub=smtp.gmail.com:587
-    hostname=your-server.com
-    FromLineOverride=YES
-    UseSTARTTLS=YES
-    AuthUser=your-sending-email@gmail.com
-    AuthPass=your-google-app-password
-    ```
-    **Important:** For services like Gmail, you must generate a service-specific "App Password."
+Edit the `/etc/ssmtp/ssmtp.conf` configuration file with your email provider's information.
 
 ### Step 3: Customize the Configuration File
 
-This is the heart of the system. Open the `backup_sites.conf` file and adjust all the variables for your environment. The section below details each variable.
+This is the heart of the system. Open the `backup_sites.conf` file and adjust all the variables for your environment.
 
 ### Step 4: Schedule Automation with Cron
 
@@ -148,7 +121,25 @@ Finally, schedule the script to run automatically.
 
 ---
 
-## 🔧 File Breakdown
+## Restoration Assistant
+
+This project includes a `restore_site.sh` to help you recover data easily and interactively.
+
+**How to use:**
+```sh
+./restore_site.sh
+```
+
+**What it does:**
+1.  **Site Selection**: Lists configured sites and lets you choose one.
+2.  **Date Selection**: Fetches available backups from S3 and presents a date list.
+3.  **File Restoration**: Downloads and extracts files to a specific local directory you provide.
+4.  **Database Restoration**: Prompts for credentials of an **existing** database, validates the connection, downloads the dump, and imports it.
+5.  **WordPress Auto-Config**: If `wp-config.php` is found in the restored files, the script automatically updates `DB_NAME`, `DB_USER`, and `DB_PASSWORD` to match the credentials provided during the restore process.
+
+---
+
+## File Breakdown
 
 ### The Configuration File: `backup_sites.conf`
 
@@ -244,15 +235,15 @@ Contributions are what make the open source community such an amazing place to l
 
 ---
 
-## 👤 About the Author
+## About the Author
 
 Developed by [Rodrigo Lemos](https://linkedin.com/in/irlemos)
 
-💻 **Extensive experience in software development, integrations, and complex solutions**  
+**Extensive experience in software development, integrations, and complex solutions**  
 With vast experience in multiple programming languages, platforms, and scalable projects.
 
 ---
 
-## 📜 License
+## License
 
 Distributed under the MIT License. See `LICENSE` for more information.
